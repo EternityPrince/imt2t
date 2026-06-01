@@ -28,52 +28,49 @@ def process_directory(target_dir):
         content = f.read()
 
     image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.webp')
+    # Сортируем для предсказуемого порядка (img_ref_0, img_ref_1...)
     images = sorted([f for f in dir_path.iterdir() if f.suffix.lower() in image_extensions])
     
     if not images:
         return
 
-    footnotes = []
+    references = []
     processed_images = []
 
-    # Добавляем разделитель для футера, если его еще нет
-    if "\n---" not in content:
-        content += "\n\n---"
-
-    for idx, img_path in enumerate(images, start=1):
+    for idx, img_path in enumerate(images):
         img_name = img_path.name
         img_base64 = image_to_base64(img_path)
         
-        # Создаем уникальный идентификатор для сноски
-        footnote_id = f"fig_{idx}"
-        footnote_marker = f"[^{footnote_id}]"
-        footnote_content = f"[^{footnote_id}]: ![]({img_base64})"
+        ref_id = f"img_ref_{idx}"
+        ref_marker = f"![][{ref_id}]"
+        ref_definition = f"[{ref_id}]: {img_base64}"
 
-        # Ищем упоминание файла в тексте (в любом виде)
-        # 1. Пытаемся заменить стандартный синтаксис ![alt](path)
-        pattern = re.compile(rf'!\[(.*?)\]\({re.escape(img_name)}\)')
+        # 1. Замена стандартного синтаксиса ![alt](filename)
+        pattern = re.compile(rf'!\[.*?\]\({re.escape(img_name)}\)')
         
         if pattern.search(content):
-            content = pattern.sub(footnote_marker, content)
-            footnotes.append(footnote_content)
+            content = pattern.sub(ref_marker, content)
+            references.append(ref_definition)
             processed_images.append(img_path)
         elif img_name in content:
-            # 2. Если просто имя файла текстом
-            content = content.replace(img_name, footnote_marker)
-            footnotes.append(footnote_content)
+            # 2. Если имя файла просто упомянуто текстом (например, в вашем дампе)
+            content = content.replace(img_name, ref_marker)
+            references.append(ref_definition)
             processed_images.append(img_path)
 
-    # Записываем сноски в самый конец файла
-    if footnotes:
-        content += "\n\n" + "\n\n".join(footnotes) + "\n"
+    # Добавляем список определений в конец файла
+    if references:
+        # Проверяем, есть ли уже пустые строки в конце
+        content = content.rstrip() 
+        content += "\n\n" + "\n".join(references) + "\n"
 
     with open(md_file_path, 'w', encoding='utf-8') as f:
         f.write(content)
 
-    # Удаляем оригиналы
+    # Удаление оригиналов
     for img_path in processed_images:
         os.remove(img_path)
-        print(f"[{target_dir}] Зашито в футер и удалено: {img_path.name}")
+        print(f"[{target_dir}] Embedded as reference: {img_path.name}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
